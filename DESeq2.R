@@ -1,0 +1,360 @@
+# Install Packages
+source("http://bioconductor.org/biocLite.R")
+biocLite("DESeq2")
+chooseCRANmirror()  # USA: CA1
+install.packages("DESeq2")
+install.packages("arrayQualityMetrics")
+install.packages("Biobase")
+install.packages("vsn")
+library(DESeq2)
+library(arrayQualityMetrics)
+library(Biobase)
+library("vsn")
+
+# Read in counts and simplify sample names
+# Each gene is designated as an isogroup we only see isogroup0, isogroup1, isogroup10, isogroup100, etc. in the head(). Counts were normalized to median (or mean) counts not control genes due to legit up-regulation of abundant genes
+setwd("Data")
+countData <- read.table("allcounts.txt")
+names(countData)=sub(".sam.counts","",names(countData))
+names(countData)
+head(countData)
+write.csv(countData, "countData.csv", quote=F)
+totalCounts=colSums(countData)
+
+# Total counts per sample 
+totalCounts
+min(totalCounts) 
+max(totalCounts) 
+mean(totalCounts) 
+
+# Construct conditions 
+indiv= c("F1", "F1", "F1", "F1", "F1", "F1", "F1", "F2", "F2", "F2", "F2", "F2", "F2", "F2", "F3", "F3", "F3","F3", "F3", "F3")  
+lunar=c("3Q", "FM", "NM", "1Q","3Q", "FM", "NM", "3Q", "FM", "NM", "1Q", "3Q", "FM", "NM", "FM", "NM", "1Q", "3Q", "FM", "NM")
+dayTime=c("day","day","day", "night", "night", "night", "night", "day","day","day", "night", "night", "night", "night", "day","day", "night", "night", "night","night")
+g=data.frame(indiv, lunar, dayTime)
+g
+colData<- g
+
+# Make big dataframe and specify design
+dds<-DESeqDataSetFromMatrix(countData=countData, colData=colData, design=~dayTime+lunar) 
+
+# Sample Outlier Detection With arrayQualityMetrics
+vsd=varianceStabilizingTransformation(dds, blind=TRUE)
+head(assay(vsd),10)
+e=ExpressionSet(assay(vsd), AnnotatedDataFrame(as.data.frame(colData(vsd))))
+arrayQualityMetrics(e, intgroup=c("indiv", "lunar", "dayTime"), force=T)
+
+# If there are no outliers continue, if there are outliers remove them and restructure conditions
+
+# Differential Expression Analysis (DESeq2)
+dds <- DESeq(dds)
+res<-results(dds)
+summary(res)
+head(res)
+mcols(res,use.names=TRUE)
+write.csv(as.data.frame(res),file="results_DESeq2.csv")
+
+# Create a MA plot showing DEGs, colouring in red those genes that are significatn at 10% FDR
+plotMA(res, alpha=0.01)
+
+#### plotDispEsts(dds)
+plotDispEsts(dds, main="Dispersion plot", ylim = c(1e-6, 1e1) )
+
+# Plot a histogram of unadjusted p-values after filtering to look at their distribution
+hist(res$pvalue, breaks=100, col="skyblue",border="slateblue",main="unadjustedP-value Histogram")
+
+# Regularized log transformation for clustering/heatmaps, etc
+rld <- rlogTransformation(dds, blind=TRUE)
+# we choose blind so that the initial conditions setting does not influence the outcome, ie we want to see if the conditions cluster based purely on the individual 
+head(assay(rld))
+hist(assay(rld))
+par(mfrow=c(1,3))
+notAllZero <- (rowSums(counts(dds))>0)
+meanSdPlot(log2(counts(dds,normalized=TRUE)[notAllZero,] + 1), ylim = c(0,2.5))
+meanSdPlot(assay(rld[notAllZero,]), ylim = c(0,2.5))
+meanSdPlot(assay(vsd[notAllZero,]), ylim = c(0,2.5))
+qs <- c( 0, quantile( res$baseMean[res$baseMean > 0], 0:7/7 ) )
+# "cut" the genes into the bins
+bins <- cut( res$baseMean, qs )
+# rename the levels of the bins using the middle point
+levels(bins) <- paste0("~",round(.5*qs[-1] + .5*qs[-length(qs)]))
+# calculate the ratio of ?p? values less than .01 for each bin
+ratios <- tapply( res$pvalue, bins, function(p) mean( p < .01, na.rm=TRUE ) )
+# plot these ratios
+barplot(ratios, xlab="mean normalized count", ylab="ratio of small $p$ values")
+
+# Use contrasts to compare levels of lunar period and the dayTime
+#------full moon to new moon
+resAH=results(dds, contrast=c("lunar", "FM", "NM"))
+table(resAH$padj<0.1)
+table(resAH$pvalue<0.05)
+
+#------full moon to 1Q
+resDH=results(dds, contrast=c("lunar","FM","1Q"))
+table(resDH$padj<0.1)
+table(resDH$pvalue<0.05)
+
+#------full moon to 3Q
+resDA=results(dds, contrast=c("lunar","FM","3Q"))
+table(resDA$padj<0.1)
+table(resDA$pvalue<0.05)
+
+#------new moon to 3Q
+resNM=results(dds, contrast=c("lunar","NM","3Q"))
+table(resNM$padj<0.1)
+table(resNM$pvalue<0.05)
+
+#------new moon to 1Q
+resDD=results(dds, contrast=c("lunar","NM","1Q"))
+table(resDD$padj<0.1)
+table(resDD$pvalue<0.05)
+
+#-----1Q to 3Q
+resDV=results(dds, contrast=c("lunar","1Q","3Q"))
+table(resDV$padj<0.1)
+table(resDV$pvalue<0.05)
+
+#------day to night
+resDN=results(dds,contrast=c("dayTime","day","night"))
+table(resDN$padj<0.1)
+table(resDN$pvalue<0.05)
+
+save(dds, res, resAH, resDH, resDA, resNM, resDD, resDV, resDN, file="DESeq2Results.Rdata")
+
+# Exporting and log GO
+vsd=getVarianceStabilizedData(dds) 
+head(vsd)
+colnames(vsd)=paste(g$indiv, g$lunar, g$dayTime, sep="")
+
+#--------------get pvals from contrasts
+head(resDH)
+valsDH=cbind(resDH$pvalue, resDH$padj)
+head(valsDH)
+colnames(valsDH)=c("pvalDH", "padjDH")
+
+head(resAH)
+valsAH=cbind(resAH$pvalue, resAH$padj)
+head(valsAH)
+colnames(valsAH)=c("pvalAH", "padjAH")
+
+head(resDA)
+valsDA=cbind(resDA$pvalue, resDA$padj)
+head(valsDA)
+colnames(valsDA)=c("pvalDA", "padjDA")
+
+head(resNM)
+valsNM=cbind(resNM$pvalue, resNM$padj)
+head(valsNM)
+colnames(valsNM)=c("pvalNM", "padjNM")
+
+head(resDD)
+valsDD=cbind(resDD$pvalue, resDD$padj)
+head(valsDD)
+colnames(valsDD)=c("pvalDD", "padjDD")
+
+head(resDV)
+valsDV=cbind(resDV$pvalue, resDV$padj)
+head(valsDV)
+colnames(valsDV)=c("pvalDV", "padjDV")
+
+head(resDN)
+valsDN=cbind(resDN$pvalue, resDN$padj)
+head(valsDN)
+colnames(valsDN)=c("pvalDN","padjDN")
+
+results=cbind(valsDH,valsAH,valsDA,valsNM,valsDD,valsDV,valsDN)
+head(results)
+
+# Explore Contrasts
+#-------------make vsd and pvals table
+vsdpvals=cbind(vsd,results)
+head(vsdpvals)
+
+write.csv(vsdpvals, "VSDandPVALS_lunar.csv", quote=F)
+VSD_PVals=read.csv("VSDandPVALS_lunar.csv")
+
+#---------------get data for WGCNA
+head(vsdpvals)
+vsdp=as.data.frame(vsdpvals)
+
+AH01=vsdp[vsdp$pvalAH<0.1 & !is.na(vsdp$pvalAH),]
+length(AH01[,1]) 
+
+DA01=vsdp[vsdp$pvalDA<0.1 & !is.na(vsdp$pvalDA),]
+length(DA01[,1]) 
+
+DH01=vsdp[vsdp$pvalDH<0.1 & !is.na(vsdp$pvalDH),]
+length(DH01[,1]) 
+
+NM01=vsdp[vsdp$pvalNM<0.1 & !is.na(vsdp$pvalNM),]
+length(NM01[,1])
+
+DD01=vsdp[vsdp$pvalDD<0.1 & !is.na(vsdp$pvalDD),]
+length(DD01[,1])  
+
+DV01=vsdp[vsdp$pvalDV<0.1 & !is.na(vsdp$pvalDV),]
+length(DV01[,1]) 
+
+DN01=vsdp[vsdp$pvalDN<0.1 & !is.na(vsdp$pvalDN),]
+length(DN01[,1])
+
+degs01=union(row.names(AH01),row.names(DA01))
+degs01=union(degs01,row.names(DH01))
+degs01=union(degs01,row.names(NM01))
+degs01=union(degs01,row.names(DD01))
+degs01=union(degs01,row.names(DV01))
+degs01=union(degs01,row.names(DN01))
+length(degs01)
+
+wdegs01=vsd[(row.names(vsd) %in% degs01),]
+head(wdegs01)
+
+write.csv(wdegs01, "genes4WGCNA.csv", quote=F)
+
+
+#----------log GO
+head(resDA)
+logs=data.frame(cbind("gene"=row.names(resDA),"logP"=round(-log(resDA$pvalue+1e-10,10),1)))
+logs$logP=as.numeric(as.character(logs$logP))
+sign=rep(1,nrow(logs))
+sign[resDA$log2FoldChange<0]=-1  ##change to correct model
+table(sign)
+logs$logP=logs$logP*sign
+write.table(logs,quote=F,row.names=F,file="GO_DA_logP.csv",sep=",")
+
+head(resAH)
+logs=data.frame(cbind("gene"=row.names(resAH),"logP"=round(-log(resAH$pvalue+1e-10,10),1)))
+logs$logP=as.numeric(as.character(logs$logP))
+sign=rep(1,nrow(logs))
+sign[resAH$log2FoldChange<0]=-1  ##change to correct model
+table(sign)
+logs$logP=logs$logP*sign
+write.table(logs,quote=F,row.names=F,file="GO_AH_logP.csv",sep=",")
+
+head(resDH)
+logs=data.frame(cbind("gene"=row.names(resDH),"logP"=round(-log(resDH$pvalue+1e-10,10),1)))
+logs$logP=as.numeric(as.character(logs$logP))
+sign=rep(1,nrow(logs))
+sign[resDH$log2FoldChange<0]=-1  ##change to correct model
+table(sign)
+logs$logP=logs$logP*sign
+write.table(logs,quote=F,row.names=F,file="GO_DH_logP.csv",sep=",")
+
+head(resNM)
+logs=data.frame(cbind("gene"=row.names(resNM),"logP"=round(-log(resNM$pvalue+1e-10,10),1)))
+logs$logP=as.numeric(as.character(logs$logP))
+sign=rep(1,nrow(logs))
+sign[resNM$log2FoldChange<0]=-1  ##change to correct model
+table(sign)
+logs$logP=logs$logP*sign
+write.table(logs,quote=F,row.names=F,file="GO_NM_logP.csv",sep=",")
+
+head(resDD)
+logs=data.frame(cbind("gene"=row.names(resDD),"logP"=round(-log(resDD$pvalue+1e-10,10),1)))
+logs$logP=as.numeric(as.character(logs$logP))
+sign=rep(1,nrow(logs))
+sign[resDD$log2FoldChange<0]=-1  ##change to correct model
+table(sign)
+logs$logP=logs$logP*sign
+write.table(logs,quote=F,row.names=F,file="GO_DD_logP.csv",sep=",")
+
+head(resDV)
+logs=data.frame(cbind("gene"=row.names(resDV),"logP"=round(-log(resDV$pvalue+1e-10,10),1)))
+logs$logP=as.numeric(as.character(logs$logP))
+sign=rep(1,nrow(logs))
+sign[resDV$log2FoldChange<0]=-1  ##change to correct model
+table(sign)
+logs$logP=logs$logP*sign
+write.table(logs,quote=F,row.names=F,file="GO_DV_logP.csv",sep=",")
+
+head(resDN)
+logs=data.frame(cbind("gene"=row.names(resDN),"logP"=round(-log(resDN$pvalue+1e-10,10),1)))
+logs$logP=as.numeric(as.character(logs$logP))
+sign=rep(1,nrow(logs))
+sign[resDN$log2FoldChange<0]=-1  ##change to correct model
+table(sign)
+logs$logP=logs$logP*sign
+write.table(logs,quote=F,row.names=F,file="GO_DN_logP.csv",sep=",")
+
+#-------------write results tables; includes log2fc and pvals
+write.table(results(dds), file="DESeq.results.txt", quote=FALSE, sep="\t");  
+write.table(resDA, file="DESeq.results.DA.txt", quote=F, sep="\t")
+write.table(resAH, file="DESeq.results.AH.txt", quote=F, sep="\t")
+write.table(resDH, file="DESeq.results.DH.txt", quote=F, sep="\t")
+write.table(resNM, file="DESeq.results.NM.txt", quote=F, sep="\t")
+write.table(resDD, file="DESeq.results.DD.txt", quote=F, sep="\t")
+write.table(resDV, file="DESeq.results.DV.txt", quote=F, sep="\t")
+write.table(resDN, file="DESeq.results.DN.txt", quote=F, sep="\t")
+DESeq_DA=read.table("DESeq.results.DA.txt")
+
+# Write annotated results tables
+setwd("Data")
+gg=read.delim("transcriptome_iso2gene.tab", sep="\t")
+head(gg)
+
+resDA=as.data.frame(resDA)
+resDA$X=row.names(resDA)
+names(resDA)
+resDA=resDA[c(7,1:6)]
+head(resDA)
+resDAannot=merge(resDA,gg,by=1)
+head(resDAannot)
+resDAannot <- resDAannot[order(resDAannot$padj),]
+write.table(resDAannot, "annotated_results_DA.txt", sep="\t", quote=F, row.names=F)
+
+resDH=as.data.frame(resDH)
+resDH$X=row.names(resDH)
+names(resDH)
+resDH=resDH[c(7,1:6)]
+resDHannot=merge(resDH,gg,by=1)
+head(resDHannot)
+resDHannot <- resDHannot[order(resDHannot$padj),]
+write.table(resDHannot, "annotated_results_DH.txt", sep="\t", quote=F, row.names=F)
+
+resAH=as.data.frame(resAH)
+resAH$X=row.names(resAH)
+names(resAH)
+resAH=resAH[c(7,1:6)]
+resAHannot=merge(resAH,gg,by=1)
+head(resAHannot)
+resAHannot <- resAHannot[order(resAHannot$padj),]
+write.table(resAHannot, "annotated_results_AH.txt", sep="\t", quote=F, row.names=F)
+
+resNM=as.data.frame(resNM)
+resNM$X=row.names(resNM)
+names(resNM)
+resNM=resNM[c(7,1:6)]
+resNMannot=merge(resNM,gg,by=1)
+head(resNMannot)
+resNMannot <- resNMannot[order(resNMannot$padj),]
+write.table(resNMannot, "annotated_results_NM.txt", sep="\t", quote=F, row.names=F)
+
+resDD=as.data.frame(resDD)
+resDD$X=row.names(resDD)
+names(resDD)
+resDD=resDD[c(7,1:6)]
+resDDannot=merge(resDD,gg,by=1)
+head(resDDannot)
+resDDannot <- resDDannot[order(resDDannot$padj),]
+write.table(resDDannot, "annotated_results_DD.txt", sep="\t", quote=F, row.names=F)
+
+resDV=as.data.frame(resDV)
+resDV$X=row.names(resDV)
+names(resDV)
+resDV=resDV[c(7,1:6)]
+resDVannot=merge(resDV,gg,by=1)
+head(resDVannot)
+resDVannot <- resDVannot[order(resDVannot$padj),]
+write.table(resDVannot, "annotated_results_DV.txt", sep="\t", quote=F, row.names=F)
+
+resDN=as.data.frame(resDN)
+resDN$X=row.names(resDN)
+names(resDN)
+resDN=resDN[c(7,1:6)]
+resDNannot=merge(resDN,gg,by=1)
+head(resDNannot)
+resDNannot <- resDNannot[order(resDNannot$padj),]
+write.table(resDNannot, "annotated_results_DN.txt", sep="\t", quote=F, row.names=F)
+
+# Print session info
+devtools::session_info()
