@@ -103,7 +103,7 @@ ordihull(scores,dayTime,label=T)
 
 plot(scores[,1], scores[,2],col=as.numeric(conditions$indiv), pch=16)
 ordihull(scores,indiv,label=T)
-```
+
 #-------------Second and third axes 
 plot(scores[,2], scores[,3],col=as.numeric(conditions$lunar),pch=16)
 ordihull(scores[,2:3],lunar,label=T)
