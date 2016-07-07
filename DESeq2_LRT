@@ -1,0 +1,346 @@
+---
+title: "DESeq2-TimeSeriesAnalysis"
+author: "Matthew Oldach"
+date: "September 24, 2015"
+output: html_document
+---
+
+## Guide to using the DESeq2 analyis package
+
+```{r, message=FALSE}
+
+library(DESeq2)
+library(arrayQualityMetrics)
+library(Biobase)
+library(pheatmap)
+library(ggplot2)
+
+```
+
+### Read in counts and simplify sample names
+#### Each gene is designated as an isogroup we only see isogroup0, isogroup1, isogroup10, isogroup100, etc. in the head(). Counts were normalized to median (or mean) counts not control genes due to legit up-regulation of abundant genes
+```{r}
+countData <- read.table("allcounts.txt")
+names(countData)=sub(".sam.counts","",names(countData))
+names(countData)
+```
+```{r}
+head(countData)
+```
+```{r}
+write.csv(countData, "countData.csv", quote=F)
+totalCounts=colSums(countData)
+```
+#### Total counts per sample (MEGA2014)
+```{r}
+totalCounts
+min(totalCounts) 
+max(totalCounts) 
+mean(totalCounts) 
+```
+
+### Construct conditions (MEGA2014)
+```{r}
+indiv= c("H1", "H1", "H1", "H1", "H1", "H1", "H1", "H1", "H2", "H2", "H2", "H2", "H2", "H2", "H3", "H3", "H3", "H3","H3", "H3", "H3", "H3")  
+lunar=c("3", "1", "4", "2", "3","1", "4", "2", "3", "4", "2", "3", "1", "2", "3","1", "4", "2", "3", "1", "4", "3")
+dayTime=c("day","day","day","day", "night", "night", "night", "night", "day","day","day", "night", "night", "night", "day","day","day","day", "night", "night", "night", "night")
+```
+```
+```{r}
+g=data.frame(indiv, lunar, dayTime)
+g
+```
+```{r}
+colData<- g
+```
+
+### Make big dataframe for the interaction effect - differential expression analysis (DESeq2)
+```{r}
+dds<-DESeqDataSetFromMatrix(countData=countData, colData=colData, design=~dayTime+lunar+dayTime:lunar) 
+dds <- DESeq(dds, test="LRT", reduced = ~ dayTime+lunar)
+res<-results(dds)
+```
+# dayTime
+```{r}
+topGenes <- rownames(res)[order(res$padj)][1:25]
+topGenes
+
+# interestingGene <- res[grep("^isogroup3676", rownames(res)),]
+```
+```{r, error=FALSE, message=FALSE, warning=FALSE, warn.conflicts=FALSE}
+z <- lapply(topGenes, function(x) plotCounts(dds, x, c("dayTime", "lunar"),returnData = TRUE))
+z
+for(i in 1:25) z[[i]]$gene <- rep(topGenes[i], 22)
+z <- do.call(rbind, z)
+pdf("interaction_BydayTime.pdf")
+ggplot(z, aes(x=lunar, y=count, color=dayTime, group=dayTime)) + 
+  geom_point(position = position_jitter(width =0.1, height=0), size = 3) + stat_smooth(se=FALSE,method="loess") +  scale_y_log10() + facet_wrap(~gene)
+  dev.off()
+```
+# Individuals
+```{r, error=FALSE, message=FALSE, warning=FALSE, warn.confligcts=FALSE}
+z <- lapply(topGenes, function(x) plotCounts(dds, x, c("indiv", "lunar"),returnData = TRUE))
+z
+for(i in 1:25) z[[i]]$gene <- rep(topGenes[i], 22)
+pdf("interaction_Byindiv.pdf")
+z <- do.call(rbind, z)
+ggplot(z, aes(x=lunar, y=count, color=indiv, group=indiv)) + 
+  geom_point(position = position_jitter(width =0.1, height=0), size = 3) + stat_smooth(se=FALSE,method="loess") +  scale_y_log10() + facet_wrap(~gene)
+dev.off()
+```
+
+# Cluster significant genes by their profiles - plot log2 fold changes in a heatmap
+```{r}
+pdf("interaction_heatmap.pdf")
+betas <- coef(dds)
+colnames(betas)
+topGenes <- head(order(res$pvalue),20)
+mat <- betas[topGenes, -c(1,2)]
+thr <- 3
+mat[mat < -thr] <- -thr
+mat[mat > thr] <- thr
+pheatmap(mat, breaks=seq(from=-thr, to=thr, length=101),cluster_col=FALSE)
+dev.off()
+```
+
+### Make big dataframe for dayTime effect - differential expression analysis (DESeq2)
+```{r}
+dds<-DESeqDataSetFromMatrix(countData=countData, colData=colData, design=~dayTime+lunar) 
+dds <- DESeq(dds, test="LRT", reduced = ~ lunar)
+res<-results(dds)
+```
+# dayTime
+```{r}
+topGenes <- rownames(res)[order(res$padj)][1:25]
+topGenes
+```
+```{r, error=FALSE, message=FALSE, warning=FALSE, warn.conflicts=FALSE}
+
+z <- lapply(topGenes, function(x) plotCounts(dds, x, c("dayTime", "lunar"),returnData = TRUE))
+z
+for(i in 1:25) z[[i]]$gene <- rep(topGenes[i], 22)
+z <- do.call(rbind, z)
+pdf("dayTime_BydayTime.pdf")
+ggplot(z, aes(x=lunar, y=count, color=dayTime, group=dayTime)) + 
+  geom_point(position = position_jitter(width =0.1, height=0), size = 3) + stat_smooth(se=FALSE,method="loess") +  scale_y_log10() + facet_wrap(~gene)
+  dev.off()
+```
+# Individuals
+```{r, error=FALSE, message=FALSE, warning=FALSE, warn.confligcts=FALSE}
+z <- lapply(topGenes, function(x) plotCounts(dds, x, c("indiv", "lunar"),returnData = TRUE))
+z
+for(i in 1:25) z[[i]]$gene <- rep(topGenes[i], 22)
+pdf("dayTime_Byindiv.pdf")
+z <- do.call(rbind, z)
+ggplot(z, aes(x=lunar, y=count, color=indiv, group=indiv)) + 
+  geom_point(position = position_jitter(width =0.1, height=0), size = 3) + stat_smooth(se=FALSE,method="loess") +  scale_y_log10() + facet_wrap(~gene)
+dev.off()
+```
+
+# Cluster significant genes by their profiles - plot log2 fold changes in a heatmap
+```{r}
+pdf("dayTime_heatmap.pdf")
+betas <- coef(dds)
+colnames(betas)
+topGenes <- head(order(res$pvalue),20)
+mat <- betas[topGenes, -c(1,2)]
+thr <- 3
+mat[mat < -thr] <- -thr
+mat[mat > thr] <- thr
+pheatmap(mat, breaks=seq(from=-thr, to=thr, length=101),cluster_col=FALSE)
+dev.off()
+```
+
+### Make big dataframe for something you haven't tried - differential expression analysis (DESeq2)
+```{r}
+dds<-DESeqDataSetFromMatrix(countData=countData, colData=colData, design=~dayTime+lunar) 
+dds <- DESeq(dds, test="LRT", reduced = ~ dayTime)
+res<-results(dds)
+```
+
+#-------------write results tables; includes log2fc and pvals
+```{r}
+write.table(results(dds), file="DESeq.LRTdayTime-results.txt", quote=FALSE, sep="\t");  
+```
+#### Write annotated results tables
+```{r}
+gg=read.delim("amil_iso2gene.tab", sep="\t")
+head(gg)
+
+res=as.data.frame(res)
+res$X=row.names(res)
+names(res)
+res=res[c(7,1:6)]
+resannot=merge(res,gg,by=1)
+head(resannot)
+resannot <- resannot[order(resannot$padj),]
+write.table(resannot, "LRTdayTime-annotated_results.txt", sep="\t", quote=F, row.names=F)
+```
+
+# dayTime
+```{r}
+topGenes <- rownames(res)[order(res$padj)][1:25]
+topGenes
+```
+```{r, error=FALSE, message=FALSE, warning=FALSE, warn.conflicts=FALSE}
+z <- lapply(topGenes, function(x) plotCounts(dds, x, c("dayTime", "lunar"),returnData = TRUE))
+z
+for(i in 1:25) z[[i]]$gene <- rep(topGenes[i], 22)
+z <- do.call(rbind, z)
+pdf("attempt_BydayTime.pdf")
+ggplot(z, aes(x=lunar, y=count, color=dayTime, group=dayTime)) + 
+  geom_point(position = position_jitter(width =0.1, height=0), size = 3) + stat_smooth(se=FALSE,method="loess") +  scale_y_log10() + facet_wrap(~gene)
+  dev.off()
+```
+# Individuals
+```{r, error=FALSE, message=FALSE, warning=FALSE, warn.confligcts=FALSE}
+z <- lapply(topGenes, function(x) plotCounts(dds, x, c("indiv", "lunar"),returnData = TRUE))
+z
+for(i in 1:25) z[[i]]$gene <- rep(topGenes[i], 22)
+pdf("attempt_Byindiv.pdf")
+z <- do.call(rbind, z)
+ggplot(z, aes(x=lunar, y=count, color=indiv, group=indiv)) + 
+  geom_point(position = position_jitter(width =0.1, height=0), size = 3) + stat_smooth(se=FALSE,method="loess") +  scale_y_log10() + facet_wrap(~gene)
+dev.off()
+```
+
+# Cluster significant genes by their profiles - plot log2 fold changes in a heatmap
+```{r}
+pdf("attempt_heatmap.pdf")
+betas <- coef(dds)
+colnames(betas)
+topGenes <- head(order(res$pvalue),20)
+mat <- betas[topGenes, -c(1,2)]
+thr <- 3
+mat[mat < -thr] <- -thr
+mat[mat > thr] <- thr
+pheatmap(mat, breaks=seq(from=-thr, to=thr, length=101),cluster_col=FALSE)
+dev.off()
+```
+
+### Make big dataframe for the lunar effect - differential expression analysis (DESeq2)
+```{r}
+dds<-DESeqDataSetFromMatrix(countData=countData, colData=colData, design=~dayTime+lunar) 
+dds <- DESeq(dds)
+
+
+resNM <- results(dds, contrast=c("lunar","1","2"))
+write.table(resNM, file="DESeq.results.NM.txt", quote=F, sep="\t")
+resNM=as.data.frame(resNM)
+resNM$X=row.names(resNM)
+names(resNM)
+resNM=resNM[c(7,1:6)]
+resNMannot=merge(resNM,gg,by=1)
+head(resNMannot)
+resNMannot <- resNMannot[order(resNMannot$padj),]
+write.table(resNMannot, "annotated_results_NM.txt", sep="\t", quote=F, row.names=F)
+
+resDV <- results(dds, contrast=c("lunar","1","3"))
+write.table(resDV, file="DESeq.results.DV.txt", quote=F, sep="\t")
+resDV=as.data.frame(resDV)
+resDV$X=row.names(resDV)
+names(resDV)
+resDV=resDV[c(7,1:6)]
+resDVannot=merge(resDV,gg,by=1)
+head(resDVannot)
+resDVannot <- resDVannot[order(resDVannot$padj),]
+write.table(resDVannot, "annotated_results_DV.txt", sep="\t", quote=F, row.names=F)
+
+resDA <- results(dds, contrast=c("lunar","1","4"))
+write.table(resDA, file="DESeq.results.DA.txt", quote=F, sep="\t")
+resDA=as.data.frame(resDA)
+resDA$X=row.names(resDA)
+names(resDA)
+resDA=resDA[c(7,1:6)]
+resDAannot=merge(resDA,gg,by=1)
+head(resDAannot)
+resDAannot <- resDAannot[order(resDAannot$padj),]
+write.table(resDAannot, "annotated_results_DA.txt", sep="\t", quote=F, row.names=F)
+
+resDD <- results(dds, contrast=c("lunar","2","3"))
+write.table(resDD, file="DESeq.results.DD.txt", quote=F, sep="\t")
+resDD=as.data.frame(resDD)
+resDD$X=row.names(resDD)
+names(resDD)
+resDD=resDD[c(7,1:6)]
+resDDannot=merge(resDD,gg,by=1)
+head(resDDannot)
+resDDannot <- resDDannot[order(resDDannot$padj),]
+write.table(resDDannot, "annotated_results_DD.txt", sep="\t", quote=F, row.names=F)
+
+resAH <- results(dds, contrast=c("lunar","2","4"))
+write.table(resAH, file="DESeq.results.AH.txt", quote=F, sep="\t")
+resAH=as.data.frame(resAH)
+resAH$X=row.names(resAH)
+names(resAH)
+resAH=resAH[c(7,1:6)]
+resAHannot=merge(resAH,gg,by=1)
+head(resAHannot)
+resAHannot <- resAHannot[order(resAHannot$padj),]
+write.table(resAHannot, "annotated_results_AH.txt", sep="\t", quote=F, row.names=F)
+
+resDH <- results(dds, contrast=c("lunar","3","4"))
+write.table(resDH, file="DESeq.results.DH.txt", quote=F, sep="\t")
+resDH=as.data.frame(resDH)
+resDH$X=row.names(resDH)
+names(resDH)
+resDH=resDH[c(7,1:6)]
+resDHannot=merge(resDH,gg,by=1)
+head(resDHannot)
+resDHannot <- resDHannot[order(resDHannot$padj),]
+write.table(resDHannot, "annotated_results_DH.txt", sep="\t", quote=F, row.names=F)
+
+res<-results(dds)
+```
+
+# dayTime
+```{r}
+topGenes <- rownames(res)[order(res$padj)][1:25]
+topGenes
+```
+```{r, error=FALSE, message=FALSE, warning=FALSE, warn.conflicts=FALSE}
+
+z <- lapply(topGenes, function(x) plotCounts(dds, x, c("dayTime", "lunar"),returnData = TRUE))
+z
+for(i in 1:25) z[[i]]$gene <- rep(topGenes[i], 22)
+z <- do.call(rbind, z)
+pdf("lunar_BydayTime.pdf")
+ggplot(z, aes(x=lunar, y=count, color=dayTime, group=dayTime)) + 
+  geom_point(position = position_jitter(width =0.1, height=0), size = 3) + stat_smooth(se=FALSE,method="loess") +  scale_y_log10() + facet_wrap(~gene)
+  dev.off()
+```
+# Individuals
+```{r, error=FALSE, message=FALSE, warning=FALSE, warn.confligcts=FALSE}
+z <- lapply(topGenes, function(x) plotCounts(dds, x, c("indiv", "lunar"),returnData = TRUE))
+z
+for(i in 1:25) z[[i]]$gene <- rep(topGenes[i], 22)
+pdf("lunar_Byindiv.pdf")
+z <- do.call(rbind, z)
+ggplot(z, aes(x=lunar, y=count, color=indiv, group=indiv)) + 
+  geom_point(position = position_jitter(width =0.1, height=0), size = 3) + stat_smooth(se=FALSE,method="loess") +  scale_y_log10() + facet_wrap(~gene)
+dev.off()
+```
+
+# Cluster significant genes by their profiles - plot log2 fold changes in a heatmap
+```{r}
+pdf("heatmap.pdf")
+betas <- coef(dds)
+colnames(betas)
+topGenes <- head(order(res$pvalue),20)
+mat <- betas[topGenes, -c(1,2)]
+thr <- 3
+mat[mat < -thr] <- -thr
+mat[mat > thr] <- thr
+pheatmap(mat, breaks=seq(from=-thr, to=thr, length=101),cluster_col=FALSE)
+dev.off()
+```
+
+```{r}
+head(res)
+logs=data.frame(cbind("gene"=row.names(res),"logP"=round(-log(res$pvalue+1e-10,10),1)))
+logs$logP=as.numeric(as.character(logs$logP))
+sign=rep(1,nrow(logs))
+sign[res$log2FoldChange<0]=-1  ##change to correct model
+table(sign)
+logs$logP=logs$logP*sign
+write.table(logs,quote=F,row.names=F,file="GO_Wald-lunar_logP.csv",sep=",")
