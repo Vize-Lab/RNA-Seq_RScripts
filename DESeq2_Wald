@@ -35,7 +35,7 @@ mean(totalCounts)
 
 ### Construct conditions
 ```{r}
-indiv= c("F1", "F1", "F1", "F1", "F1", "F1", "F1", "F2", "F2", "F2", "F2", "F2", "F2", "F2", "F3", "F3", "F3","F3", "F3", "F3")  
+indiv= c("H1", "H1", "H1", "H1", "H1", "H1", "H1", "H2", "H2", "H2", "H2", "H2", "H2", "H2", "H3", "H3", "H3","H3", "H3", "H3")  
 lunar=c("3Q", "FM", "NM", "1Q","3Q", "FM", "NM", "3Q", "FM", "NM", "1Q", "3Q", "FM", "NM", "FM", "NM", "1Q", "3Q", "FM", "NM")
 dayTime=c("day","day","day", "night", "night", "night", "night", "day","day","day", "night", "night", "night", "night", "day","day", "night", "night", "night", "night")
 g=data.frame(indiv, lunar, dayTime)
