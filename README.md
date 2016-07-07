@@ -1,2 +1,1 @@
-# Acropora-Taiwan-2014
-transcriptome assembly and tag based RNA seq analysis pipeline
+RNA seq analysis pipeline includes R code for 1) Wald analysis, 2) Likelihood ratio test, and 3) Kallisto analysis
