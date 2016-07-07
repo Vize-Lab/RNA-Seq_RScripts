@@ -1,18 +1,28 @@
 ---
-title: "DESeq2"
+title: "DESeq2 Acropora millepora (lab)"
 author: "Matthew Oldach"
-date: "September 21, 2015"
-output: html_document
+date: "`r format(Sys.Date())`"
+output:
+  html_document:
+    keep_md: TRUE
 ---
 
 Basically, I'm just following along with the DESeq2 Manual (http://www.bioconductor.org/packages/2.13/bioc/vignettes/DESeq2/inst/doc/DESeq2.pdf), the packages Vignette, and from a 2014 MEGA workshop (https://github.com/z0on, https://github.com/rachelwright8/Ahya-White-Syndromes).
 
 ## Guide to using the DESeq2 analyis package
-```{r}
+
+```{r, message=FALSE}
+## Install Packages
+#source("http://bioconductor.org/biocLite.R")
+#biocLite("DESeq2")
+#chooseCRANmirror()  # USA: CA1
+#install.packages("arrayQualityMetrics")
+
 library(DESeq2)
 library(arrayQualityMetrics)
 library(Biobase)
-library("vsn")
+library(vsn)
+library(ggplot2)
 ```
 
 ### Read in counts and simplify sample names
@@ -21,11 +31,15 @@ library("vsn")
 countData <- read.table("allcounts.txt")
 names(countData)=sub(".sam.counts","",names(countData))
 names(countData)
+```
+```{r}
 head(countData)
+```
+```{r}
 write.csv(countData, "countData.csv", quote=F)
 totalCounts=colSums(countData)
 ```
-#### Total counts per sample 
+#### Total counts per sample (MEGA2014)
 ```{r}
 totalCounts
 min(totalCounts) 
@@ -33,13 +47,18 @@ max(totalCounts)
 mean(totalCounts) 
 ```
 
-### Construct conditions
+### Construct conditions (MEGA2014)
 ```{r}
-indiv= c("H1", "H1", "H1", "H1", "H1", "H1", "H1", "H2", "H2", "H2", "H2", "H2", "H2", "H2", "H3", "H3", "H3","H3", "H3", "H3")  
-lunar=c("3Q", "FM", "NM", "1Q","3Q", "FM", "NM", "3Q", "FM", "NM", "1Q", "3Q", "FM", "NM", "FM", "NM", "1Q", "3Q", "FM", "NM")
-dayTime=c("day","day","day", "night", "night", "night", "night", "day","day","day", "night", "night", "night", "night", "day","day", "night", "night", "night", "night")
+indiv= c("H1", "H3", "H1", "H2", "H3", "H1", "H2", "H3", "H1", "H2", "H3", "H1", "H2", "H3", "H1", "H2", "H3", "H1", "H2", "H3", "H1", "H3")
+lunar=c("3Q", "3Q", "NM", "NM", "NM", "1Q", "1Q", "1Q", "FM", "FM", "FM", "3Q", "3Q", "3Q", "NM", "NM", "NM", "1Q", "1Q", "1Q", "FM", "FM")
+dayTime=c("day", "day", "day", "day", "day", "day", "day", "day", "day", "day", "day", "night", "night", "night", "night", "night", "night", "night", "night", "night", "night", "night")
+```
+```
+```{r}
 g=data.frame(indiv, lunar, dayTime)
 g
+```
+```{r}
 colData<- g
 ```
 ### Make big dataframe
@@ -47,23 +66,21 @@ colData<- g
 dds<-DESeqDataSetFromMatrix(countData=countData, colData=colData, design=~lunar+dayTime) 
 ```
 
-## Sample Outlier Detection With arrayQualityMetrics (MEGA2014)
+## Sample Outlier Detection With arrayQualityMetrics
 ```{r}
 vsd=varianceStabilizingTransformation(dds, blind=TRUE)
 head(assay(vsd),10)
 e=ExpressionSet(assay(vsd), AnnotatedDataFrame(as.data.frame(colData(vsd))))
 arrayQualityMetrics(e, intgroup=c("indiv", "lunar", "dayTime"), force=T)
 ```
-No outliers detected, moving on
+No outliers
 
-# Differential Expression Analysis (DESeq2) 
+# Differential Expression Analysis (DESeq2)
 ```{r} 
 dds <- DESeq(dds)
 res<-results(dds)
 summary(res)
 head(res)
-mcols(res,use.names=TRUE)
-write.csv(as.data.frame(res),file="results_DESeq2.csv")
 ```
 
 # Visulizations 
@@ -74,7 +91,16 @@ Lets plot the log2 fold changes against the mean normalised counts, colouring in
 plotMA(res, alpha=0.01)
 ```
 
-#### plotDispEsts(dds) (MEGA2014)
+Both are empty (we can save the table and print information on the meaning of the columns as well)
+```{r}
+mcols(res,use.names=TRUE)
+```
+```{r}
+write.csv(as.data.frame(res),file="lab_results_DESeq2.csv")
+```
+Removed NA values is that correct?
+
+#### plotDispEsts(dds)
 ```{r}
 plotDispEsts(dds, main="Dispersion plot", ylim = c(1e-6, 1e1) )
 ```
@@ -83,7 +109,7 @@ The level of dispersion is related to the biological variation seen in each trea
 
 However, a lot of those black dot values below the red fitted line are probably underestimates of dispersion based on the small samples sizes used (only 3 replicates values measured in this example). So, to be conservative DESeq moves all these values below the red line up to the fitted value, BUT keeps all the empirical values above the red line, even if some of these are over estimates of dispersion.
 
-#### Plot a histogram of unadjusted p-values after filtering to look at their distribution (MEGA2014)
+#### Plot a histogram of unadjusted p-values after filtering to look at their distribution
 ```{r}
 hist(res$pvalue, breaks=100, col="skyblue",border="slateblue",main="unadjustedP-value Histogram")
 ```
@@ -109,50 +135,51 @@ qs <- c( 0, quantile( res$baseMean[res$baseMean > 0], 0:7/7 ) )
 bins <- cut( res$baseMean, qs )
 # rename the levels of the bins using the middle point
 levels(bins) <- paste0("~",round(.5*qs[-1] + .5*qs[-length(qs)]))
-# calculate the ratio of ?p? values less than .01 for each bin
+# calculate the ratio of £p£ values less than .01 for each bin
 ratios <- tapply( res$pvalue, bins, function(p) mean( p < .01, na.rm=TRUE ) )
 # plot these ratios
 barplot(ratios, xlab="mean normalized count", ylab="ratio of small $p$ values")
 ```
-## Use contrasts to compare levels of lunar period and the dayTime
+## Use Expanded Model Matrices contrasts to compare 2 lunar period across all dayTimes
 ```{r}
-#------full moon to new moon
-resAH=results(dds, contrast=c("lunar", "FM", "NM"))
+#------full moon to new moon - produces a comparison of FM over NM across ALL sets
+resAH=results(dds, contrast=c("lunar", "4","2"))
 table(resAH$padj<0.1)
 table(resAH$pvalue<0.05)
 
-#------full moon to 1Q
-resDH=results(dds, contrast=c("lunar","FM","1Q"))
+#------full moon to 1Q - produces a comparison of FM over 1Q across ALL dayTime(s)
+resDH=results(dds, contrast=c("lunar", "4","3"))
 table(resDH$padj<0.1)
 table(resDH$pvalue<0.05)
 
-#------full moon to 3Q
-resDA=results(dds, contrast=c("lunar","FM","3Q"))
-table(resDA$padj<0.1)
-table(resDA$pvalue<0.05)
-
-#------new moon to 3Q
-resNM=results(dds, contrast=c("lunar","NM","3Q"))
-table(resNM$padj<0.1)
-table(resNM$pvalue<0.05)
-
-#------new moon to 1Q
-resDD=results(dds, contrast=c("lunar","NM","1Q"))
+#------new moon to 1Q - day to night
+resDD=results(dds, contrast=c("lunar", "2","3"))
 table(resDD$padj<0.1)
 table(resDD$pvalue<0.05)
 
-#-----1Q to 3Q
-resDV=results(dds, contrast=c("lunar","1Q","3Q"))
+#------full moon to 3Q - produces a comparison of FM over 3Q across ALL dayTime(s)
+resDA=results(dds, contrast=c("lunar", "4","1"))
+table(resDA$padj<0.1)
+table(resDA$pvalue<0.05)
+
+#------new moon to 3Q - produces a comparison of FM over 3Q across ALL dayTime(s)
+resNM=results(dds, contrast=c("lunar", "2","1"))
+table(resNM$padj<0.1)
+table(resNM$pvalue<0.05)
+
+#-----1Q to 3Q 
+resDV=results(dds, contrast=c("lunar", "3","1"))
 table(resDV$padj<0.1)
 table(resDV$pvalue<0.05)
 
-#------day to night
-resDN=results(dds,contrast=c("dayTime","day","night"))
+#------day to night - 
+resDN=results(dds,contrast=c("dayTime", "day", "night"))
 table(resDN$padj<0.1)
-table(resDN$pvalue<0.05)
+table(resDN$pvalue<0.05) 
 
 save(dds, res, resAH, resDH, resDA, resNM, resDD, resDV, resDN, file="DESeq2Results.Rdata")
 ```
+
 ## Exporting and log GO
 ```{r}
 vsd=getVarianceStabilizedData(dds) 
@@ -160,15 +187,15 @@ head(vsd)
 colnames(vsd)=paste(g$indiv, g$lunar, g$dayTime, sep="")
 
 ###--------------get pvals from contrasts
-head(resDH)
-valsDH=cbind(resDH$pvalue, resDH$padj)
-head(valsDH)
-colnames(valsDH)=c("pvalDH", "padjDH")
-
 head(resAH)
 valsAH=cbind(resAH$pvalue, resAH$padj)
 head(valsAH)
 colnames(valsAH)=c("pvalAH", "padjAH")
+
+head(resDH)
+valsDH=cbind(resDH$pvalue, resDH$padj)
+head(valsDH)
+colnames(valsDH)=c("pvalDH", "padjDH")
 
 head(resDA)
 valsDA=cbind(resDA$pvalue, resDA$padj)
@@ -193,9 +220,9 @@ colnames(valsDV)=c("pvalDV", "padjDV")
 head(resDN)
 valsDN=cbind(resDN$pvalue, resDN$padj)
 head(valsDN)
-colnames(valsDN)=c("pvalDN","padjDN")
+colnames(valsDN)=c("pvalDN", "padjDN")
 
-results=cbind(valsDH,valsAH,valsDA,valsNM,valsDD,valsDV,valsDN)
+results=cbind(valsAH, valsDH, valsDA, valsNM, valsDD, valsDV, valsDN)
 head(results)
 ```
 #### Explore Contrasts
@@ -213,33 +240,34 @@ VSD_PVals=read.csv("VSDandPVALS_lunar.csv")
 head(vsdpvals)
 vsdp=as.data.frame(vsdpvals)
 
-AH01=vsdp[vsdp$pvalAH<0.1 & !is.na(vsdp$pvalAH),]
-length(AH01[,1]) 
+AH=vsdp[vsdp$pvalAH<0.1 & !is.na(vsdp$pvalAH),]
+length(AH[,1]) 
 
-DA01=vsdp[vsdp$pvalDA<0.1 & !is.na(vsdp$pvalDA),]
-length(DA01[,1]) 
+DH=vsdp[vsdp$pvalDH<0.1 & !is.na(vsdp$pvalDH),]
+length(DH[,1]) 
 
-DH01=vsdp[vsdp$pvalDH<0.1 & !is.na(vsdp$pvalDH),]
-length(DH01[,1]) 
+DA=vsdp[vsdp$pvalDA<0.1 & !is.na(vsdp$pvalDA),]
+length(DA[,1]) 
 
-NM01=vsdp[vsdp$pvalNM<0.1 & !is.na(vsdp$pvalNM),]
-length(NM01[,1])
+NM=vsdp[vsdp$pvalNM<0.1 & !is.na(vsdp$pvalNM),]
+length(NM[,1]) 
 
-DD01=vsdp[vsdp$pvalDD<0.1 & !is.na(vsdp$pvalDD),]
-length(DD01[,1])  
+DD=vsdp[vsdp$pvalDD<0.1 & !is.na(vsdp$pvalDD),]
+length(DD[,1]) 
 
-DV01=vsdp[vsdp$pvalDV<0.1 & !is.na(vsdp$pvalDV),]
-length(DV01[,1]) 
+DV=vsdp[vsdp$pvalDV<0.1 & !is.na(vsdp$pvalDV),]
+length(DV[,1]) 
 
-DN01=vsdp[vsdp$pvalDN<0.1 & !is.na(vsdp$pvalDN),]
-length(DN01[,1])
+DN=vsdp[vsdp$pvalDN<0.1 & !is.na(vsdp$pvalDN),]
+length(DN[,1]) 
 
-degs01=union(row.names(AH01),row.names(DA01))
-degs01=union(degs01,row.names(DH01))
-degs01=union(degs01,row.names(NM01))
-degs01=union(degs01,row.names(DD01))
-degs01=union(degs01,row.names(DV01))
-degs01=union(degs01,row.names(DN01))
+degs01=union(row.names(AH),row.names(DH))
+degs01=union(degs01,row.names(DA))
+degs01=union(degs01,row.names(NM))
+degs01=union(degs01,row.names(DD))
+degs01=union(degs01,row.names(DV))
+degs01=union(degs01,row.names(DN))
+
 length(degs01)
 
 wdegs01=vsd[(row.names(vsd) %in% degs01),]
@@ -249,15 +277,6 @@ write.csv(wdegs01, "genes4WGCNA.csv", quote=F)
 
 
 ######----------log GO
-head(resDA)
-logs=data.frame(cbind("gene"=row.names(resDA),"logP"=round(-log(resDA$pvalue+1e-10,10),1)))
-logs$logP=as.numeric(as.character(logs$logP))
-sign=rep(1,nrow(logs))
-sign[resDA$log2FoldChange<0]=-1  ##change to correct model
-table(sign)
-logs$logP=logs$logP*sign
-write.table(logs,quote=F,row.names=F,file="GO_DA_logP.csv",sep=",")
-
 head(resAH)
 logs=data.frame(cbind("gene"=row.names(resAH),"logP"=round(-log(resAH$pvalue+1e-10,10),1)))
 logs$logP=as.numeric(as.character(logs$logP))
@@ -275,6 +294,15 @@ sign[resDH$log2FoldChange<0]=-1  ##change to correct model
 table(sign)
 logs$logP=logs$logP*sign
 write.table(logs,quote=F,row.names=F,file="GO_DH_logP.csv",sep=",")
+
+head(resDA)
+logs=data.frame(cbind("gene"=row.names(resDA),"logP"=round(-log(resDA$pvalue+1e-10,10),1)))
+logs$logP=as.numeric(as.character(logs$logP))
+sign=rep(1,nrow(logs))
+sign[resDA$log2FoldChange<0]=-1  ##change to correct model
+table(sign)
+logs$logP=logs$logP*sign
+write.table(logs,quote=F,row.names=F,file="GO_DA_logP.csv",sep=",")
 
 head(resNM)
 logs=data.frame(cbind("gene"=row.names(resNM),"logP"=round(-log(resNM$pvalue+1e-10,10),1)))
@@ -314,22 +342,37 @@ write.table(logs,quote=F,row.names=F,file="GO_DN_logP.csv",sep=",")
 
 #-------------write results tables; includes log2fc and pvals
 write.table(results(dds), file="DESeq.results.txt", quote=FALSE, sep="\t");  
-write.table(resDA, file="DESeq.results.DA.txt", quote=F, sep="\t")
 write.table(resAH, file="DESeq.results.AH.txt", quote=F, sep="\t")
 write.table(resDH, file="DESeq.results.DH.txt", quote=F, sep="\t")
+write.table(resDA, file="DESeq.results.DA.txt", quote=F, sep="\t")
 write.table(resNM, file="DESeq.results.NM.txt", quote=F, sep="\t")
 write.table(resDD, file="DESeq.results.DD.txt", quote=F, sep="\t")
 write.table(resDV, file="DESeq.results.DV.txt", quote=F, sep="\t")
 write.table(resDN, file="DESeq.results.DN.txt", quote=F, sep="\t")
-DESeq_DA=read.table("DESeq.results.DA.txt")
-mean(DESeq_DA[,5])
 ```
-you may want omit the NA's from this I'm not sure if I should be getting these
 
 #### Write annotated results tables
 ```{r}
-gg=read.delim("transcriptome_iso2gene.tab", sep="\t")
+gg=read.delim("amil_iso2gene.tab", sep="\t")
 head(gg)
+
+resAH=as.data.frame(resAH)
+resAH$X=row.names(resAH)
+names(resAH)
+resAH=resAH[c(7,1:6)]
+resAHannot=merge(resAH,gg,by=1)
+head(resAHannot)
+resAHannot <- resAHannot[order(resAHannot$padj),]
+write.table(resAHannot, "annotated_results_AH.txt", sep="\t", quote=F, row.names=F)
+
+resDH=as.data.frame(resDH)
+resDH$X=row.names(resDH)
+names(resDH)
+resDH=resDH[c(7,1:6)]
+resDHannot=merge(resDH,gg,by=1)
+head(resDHannot)
+resDHannot <- resDHannot[order(resDHannot$padj),]
+write.table(resDHannot, "annotated_results_DH.txt", sep="\t", quote=F, row.names=F)
 
 resDA=as.data.frame(resDA)
 resDA$X=row.names(resDA)
@@ -341,28 +384,11 @@ head(resDAannot)
 resDAannot <- resDAannot[order(resDAannot$padj),]
 write.table(resDAannot, "annotated_results_DA.txt", sep="\t", quote=F, row.names=F)
 
-resDH=as.data.frame(resDH)
-resDH$X=row.names(resDH)
-names(resDH)
-resDH=resDH[c(7,1:6)]
-resDHannot=merge(resDH,gg,by=1)
-head(resDHannot)
-resDHannot <- resDHannot[order(resDHannot$padj),]
-write.table(resDHannot, "annotated_results_DH.txt", sep="\t", quote=F, row.names=F)
-
-resAH=as.data.frame(resAH)
-resAH$X=row.names(resAH)
-names(resAH)
-resAH=resAH[c(7,1:6)]
-resAHannot=merge(resAH,gg,by=1)
-head(resAHannot)
-resAHannot <- resAHannot[order(resAHannot$padj),]
-write.table(resAHannot, "annotated_results_AH.txt", sep="\t", quote=F, row.names=F)
-
 resNM=as.data.frame(resNM)
 resNM$X=row.names(resNM)
 names(resNM)
 resNM=resNM[c(7,1:6)]
+head(resNM)
 resNMannot=merge(resNM,gg,by=1)
 head(resNMannot)
 resNMannot <- resNMannot[order(resNMannot$padj),]
@@ -394,3 +420,32 @@ resDNannot=merge(resDN,gg,by=1)
 head(resDNannot)
 resDNannot <- resDNannot[order(resDNannot$padj),]
 write.table(resDNannot, "annotated_results_DN.txt", sep="\t", quote=F, row.names=F)
+```
+
+```{r, error=FALSE, message=FALSE, warning=FALSE, warn.conflicts=FALSE}
+topGenes <- rownames(resAH)[order(resAH$padj)][226:250]
+topGenes
+```
+
+
+```{r, error=FALSE, message=FALSE, warning=FALSE, warn.conflicts=FALSE}
+
+z <- lapply(topGenes, function(x) plotCounts(dds, x, c("dayTime", "lunar"),returnData = TRUE))
+z
+for(i in 1:25) z[[i]]$gene <- rep(topGenes[i], 22)
+z <- do.call(rbind, z)
+pdf("AH_BydayTime_isogroup5671.pdf")
+ggplot(z, aes(x=lunar, y=count, color=dayTime, group=dayTime)) + 
+  geom_point(position = position_jitter(width =0.1, height=0), size = 3) + stat_smooth(se=FALSE,method="loess") +  scale_y_log10() + facet_wrap(~gene)
+  dev.off()
+```
+# Individuals
+```{r, error=FALSE, message=FALSE, warning=FALSE, warn.confligcts=FALSE}
+z <- lapply(topGenes, function(x) plotCounts(dds, x, c("indiv", "lunar"),returnData = TRUE))
+z
+for(i in 1:25) z[[i]]$gene <- rep(topGenes[i], 22)
+pdf("AH_Byindiv_isogroup5671.pdf")
+z <- do.call(rbind, z)
+ggplot(z, aes(x=lunar, y=count, color=indiv, group=indiv)) + 
+  geom_point(position = position_jitter(width =0.1, height=0), size = 3) + stat_smooth(se=FALSE,method="loess") +  scale_y_log10() + facet_wrap(~gene)
+dev.off()
