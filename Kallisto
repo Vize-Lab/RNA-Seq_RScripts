@@ -1,0 +1,163 @@
+---
+title: "Coral RNA-seq - kallisto analysis"
+output:
+  html_document:
+    highlight: pygments
+    theme: spacelab
+    toc: yes
+  pdf_document:
+    toc: yes
+---
+
+
+
+```{r knitrOptions, message=FALSE, echo=FALSE}
+library(knitr)
+opts_chunk$set(warning=FALSE, message=FALSE, cache=FALSE, echo=TRUE, fig.width=12, fig.height=8)
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(stringr)
+library(tidyr)
+library(readr)
+library(readxl)
+library(ggthemr)
+library(magrittr)
+library(pander)
+library(sleuth)
+library(Biostrings)
+library(DESeq2)
+library(biobroom)
+library(ComplexHeatmap)
+library(RColorBrewer)
+library(testthat)
+library(cowplot)
+library(plotly)
+
+ggthemr("flat", "scientific", spacing = 0.5)
+source("functions.R")
+
+```
+
+## Prep data
+```{r}
+
+# create two sample data tables one for each
+
+base_dir_kallisto = "../results/kallisto/"
+sample_ids = dir(file.path(base_dir_kallisto))
+
+sample_data_kallisto = data.frame(
+  sample = sample_ids,
+  individual = sample_ids %>% str_match("(H[1,2,3])") %>% '['(,2),
+  sample_time = sample_ids %>% str_match("([D,N,C, M])") %>% '['(,2),
+  lunar_cycle = sample_ids %>% str_match("(3Q|NM|1Q|FM)") %>% '['(,2),
+  path = file.path(base_dir_kallisto, sample_ids),
+  stringsAsFactors = FALSE
+)
+
+base_dir_salmon = "../results/salmon/"
+
+sample_data_salmon = sample_data_kallisto %>% 
+  mutate(path = file.path(base_dir_salmon, sample_ids, "quant.sf" ))
+
+```
+
+```{r}
+
+# sequence to iso lookup - multiple delimiters (AARRG!!)
+seq2iso = read_delim("gene_lookup_tables/amil_seq2iso.tab", delim = "\t", col_names = c("target_id", "iso"))
+seq2iso_temp = filter(seq2iso, is.na(iso)) %>% dplyr::select(-iso)
+seq2iso_temp %<>% tidyr::extract(target_id, c("target_id", "iso"), "(.*) (.*)")
+seq2iso = seq2iso %>% filter(!is.na(iso)) %>% rbind(seq2iso_temp)
+
+# iso to gene
+iso2gene = read_delim("gene_lookup_tables/amil_iso2gene.tab", col_names = c("iso", "gene"), delim = "\t")
+iso2gene %<>% filter(!is.na(iso))
+
+# iso to kegg
+iso2kegg = read_delim("gene_lookup_tables/amil_iso2kegg.tab", col_names = c("iso", "kegg"), delim = "\t")
+
+# iso to go
+iso2go = read_delim("gene_lookup_tables/amil_iso2go.tab", col_names = c("iso", "go"), delim = "\t", skip = 1)
+
+# iso to kog
+iso2kogClass = read_delim("gene_lookup_tables/amil_iso2kogClass.tab", col_names = c("iso", "kogClass"), delim = "\t")
+all = seq2iso %>% left_join(iso2gene) %>% left_join(iso2kegg) %>% left_join(iso2go) %>% left_join(iso2kogClass)
+```
+
+```{r}
+cds = readDNAStringSet("../amillepora_transcriptome/amil_CDS.fas")
+names(cds) = names(cds) %>% str_split_fixed(" ",3) %>% '['(,1)
+```
+
+
+## Kallisto data: Slueth analysis
+
+### Fit the data
+
+```{r}
+so = sleuth_prep(sample_data_kallisto, ~individual + lunar_cycle, target_mapping = all, min_prop = .25)
+so = sleuth_fit(so)
+so = sleuth_fit(so, ~sample_time, "time")
+so = sleuth_fit(so, ~individual, "reduced")
+
+models(so)
+
+so = sleuth_lrt(so, "reduced", "full")
+so = sleuth_wt(so, "sample_timeN", "time") 
+
+results = sleuth_results(so, "reduced:full", test_type = "lrt", show_all = FALSE)
+results_sample_time = sleuth_results(so, "sample_timeN", "wt", which_model = "time", show_all = FALSE)
+
+kallisto_data = kallisto_table(so)
+```
+
+### Lunar cycle results, controled for sampling time
+
+Here we compare two models; a full model including the lunar_cycle variable is compared to a reduced model without.  We use the likelihood ratio test to compare the models for each transcript.  Transcripts with low p-values 
+```{r, fig.height=10}
+top_hits = results %>% 
+  filter(qval < 0.05) %>% 
+  left_join(kallisto_data) %>% 
+  mutate(gene = str_wrap(gene,30)) %>% 
+  mutate(lunar_cycle = factor(lunar_cycle, levels = c("NM", "1Q", "FM", "3Q"))) %>% 
+  mutate(group = paste0(target_id, ": ", gene)) 
+
+top_hit_info = all %>% 
+  filter(target_id %in% top_hits$target_id) %>% 
+  distinct(target_id) %>% 
+  mutate(sequence = cds[target_id] %>% as.character())
+
+top_hit_info %>% dplyr::select(target_id, iso, gene, kegg) %>% pander(split.table = Inf)
+
+top_hits %>% 
+  ggplot(aes(x = lunar_cycle, y = tpm, fill = lunar_cycle)) + 
+    geom_boxplot() + geom_smooth(aes(group = gene)) +
+    facet_wrap(~group, scales = "free")
+
+write_csv(top_hits, "lunar_cycle_genes_sleuth.csv")
+writeXStringSet(cds[top_hit_info$target_id], "lunar_cycle_genes_sleuth.fasta")
+```
+
+```{r}
+kallisto_mat = sleuth_to_matrix(so, "obs_norm", which_units = "tpm")
+kallisto_mat = kallisto_mat$data
+kallisto_mat = kallisto_mat[top_hit_info$target_id, sample_data_kallisto$sample]
+kallisto_mat = kallisto_mat %>% '+'(1) %>% log() %>% t() %>% scale(scale = FALSE) %>% t()
+  
+make_heatmap(kallisto_mat, sample_data = sample_data_kallisto)
+
+```
+
+```{r}
+top_hit_info %>% 
+  filter(!is.na(kogClass)) %>% 
+  count(kogClass) %>% 
+  mutate(kogClass = factor(kogClass, levels = kogClass[order(n)])) %>% 
+  ggplot(aes(x = n, y = kogClass)) +
+    geom_point(size = 3)
+
+```
