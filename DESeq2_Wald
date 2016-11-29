@@ -78,6 +78,8 @@ No outliers
 # Differential Expression Analysis (DESeq2)
 ```{r} 
 dds <- DESeq(dds)
+ddss <- counts(dds, normalized=TRUE)
+write.csv(as.data.frame(ddss),file="lab_Normalized-Counts_DESeq2.csv")
 res<-results(dds)
 summary(res)
 head(res)
