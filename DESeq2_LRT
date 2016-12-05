@@ -80,7 +80,7 @@ tgc <- summarySE(z,measurevar = "count", groupvars = c("gene","dayTime", "lunar"
 for(i in 1:25) z[[i]]$gene <- rep(topGenes[i], 22)
 z <- do.call(rbind, z)
 pdf("interaction_BydayTime.pdf")
-ggplot(tgc, aes(x=lunar, y=count, color=dayTime, group=dayTime)) + geom_errorbar(aes(ymin=count-se, ymax=count+se), width=.3)
+ggplot(tgc, aes(x=lunar, y=count, color=dayTime, group=dayTime)) + geom_errorbar(aes(ymin=count-se, ymax=count+se), width=.3) +
   geom_point(position = position_jitter(width =0.1, height=0), size = 3) + stat_smooth(se=FALSE,method="loess") +  scale_y_log10() + facet_wrap(~gene)
   dev.off()
 ```
@@ -94,7 +94,7 @@ tgc <- summarySE(z,measurevar = "count", groupvars = c("gene","dayTime", "lunar"
 for(i in 1:25) z[[i]]$gene <- rep(topGenes[i], 22)
 pdf("interaction_Byindiv.pdf")
 z <- do.call(rbind, z)
-ggplot(tgc, aes(x=lunar, y=count, color=indiv, group=indiv)) + 
+ggplot(tgc, aes(x=lunar, y=count, color=indiv, group=indiv)) + geom_errorbar(aes(ymin=count-se, ymax=count+se), width=.3) +
   geom_point(position = position_jitter(width =0.1, height=0), size = 3) + stat_smooth(se=FALSE,method="loess") +  scale_y_log10() + facet_wrap(~gene)
 dev.off()
 ```
@@ -133,7 +133,7 @@ tgc <- summarySE(z,measurevar = "count", groupvars = c("gene","dayTime", "lunar"
 for(i in 1:25) z[[i]]$gene <- rep(topGenes[i], 22)
 z <- do.call(rbind, z)
 pdf("dayTime_BydayTime.pdf")
-ggplot(tgc, aes(x=lunar, y=count, color=dayTime, group=dayTime)) + 
+ggplot(tgc, aes(x=lunar, y=count, color=dayTime, group=dayTime)) + geom_errorbar(aes(ymin=count-se, ymax=count+se), width=.3) +
   geom_point(position = position_jitter(width =0.1, height=0), size = 3) + stat_smooth(se=FALSE,method="loess") +  scale_y_log10() + facet_wrap(~gene)
   dev.off()
 ```
@@ -147,7 +147,7 @@ tgc <- summarySE(z,measurevar = "count", groupvars = c("gene","dayTime", "lunar"
 for(i in 1:25) z[[i]]$gene <- rep(topGenes[i], 22)
 pdf("dayTime_Byindiv.pdf")
 z <- do.call(rbind, z)
-ggplot(tgc, aes(x=lunar, y=count, color=indiv, group=indiv)) + 
+ggplot(tgc, aes(x=lunar, y=count, color=indiv, group=indiv)) + geom_errorbar(aes(ymin=count-se, ymax=count+se), width=.3) +
   geom_point(position = position_jitter(width =0.1, height=0), size = 3) + stat_smooth(se=FALSE,method="loess") +  scale_y_log10() + facet_wrap(~gene)
 dev.off()
 ```
@@ -206,7 +206,7 @@ tgc <- summarySE(z,measurevar = "count", groupvars = c("gene","dayTime", "lunar"
 for(i in 1:25) z[[i]]$gene <- rep(topGenes[i], 22)
 z <- do.call(rbind, z)
 pdf("attempt_BydayTime.pdf")
-ggplot(tgc, aes(x=lunar, y=count, color=dayTime, group=dayTime)) + 
+ggplot(tgc, aes(x=lunar, y=count, color=dayTime, group=dayTime)) + geom_errorbar(aes(ymin=count-se, ymax=count+se), width=.3) +
   geom_point(position = position_jitter(width =0.1, height=0), size = 3) + stat_smooth(se=FALSE,method="loess") +  scale_y_log10() + facet_wrap(~gene)
   dev.off()
 ```
@@ -220,7 +220,7 @@ tgc <- summarySE(z,measurevar = "count", groupvars = c("gene","dayTime", "lunar"
 for(i in 1:25) z[[i]]$gene <- rep(topGenes[i], 22)
 pdf("attempt_Byindiv.pdf")
 z <- do.call(rbind, z)
-ggplot(tgc, aes(x=lunar, y=count, color=indiv, group=indiv)) + 
+ggplot(tgc, aes(x=lunar, y=count, color=indiv, group=indiv)) + geom_errorbar(aes(ymin=count-se, ymax=count+se), width=.3) +
   geom_point(position = position_jitter(width =0.1, height=0), size = 3) + stat_smooth(se=FALSE,method="loess") +  scale_y_log10() + facet_wrap(~gene)
 dev.off()
 ```
@@ -328,7 +328,7 @@ tgc <- summarySE(z,measurevar = "count", groupvars = c("gene","dayTime", "lunar"
 for(i in 1:25) z[[i]]$gene <- rep(topGenes[i], 22)
 z <- do.call(rbind, z)
 pdf("lunar_BydayTime.pdf")
-ggplot(tgc, aes(x=lunar, y=count, color=dayTime, group=dayTime)) + 
+ggplot(tgc, aes(x=lunar, y=count, color=dayTime, group=dayTime)) + geom_errorbar(aes(ymin=count-se, ymax=count+se), width=.3) +
   geom_point(position = position_jitter(width =0.1, height=0), size = 3) + stat_smooth(se=FALSE,method="loess") +  scale_y_log10() + facet_wrap(~gene)
   dev.off()
 ```
@@ -342,7 +342,7 @@ tgc <- summarySE(z,measurevar = "count", groupvars = c("gene","dayTime", "lunar"
 for(i in 1:25) z[[i]]$gene <- rep(topGenes[i], 22)
 pdf("lunar_Byindiv.pdf")
 z <- do.call(rbind, z)
-ggplot(tgc, aes(x=lunar, y=count, color=indiv, group=indiv)) + 
+ggplot(tgc, aes(x=lunar, y=count, color=indiv, group=indiv)) + geom_errorbar(aes(ymin=count-se, ymax=count+se), width=.3) +
   geom_point(position = position_jitter(width =0.1, height=0), size = 3) + stat_smooth(se=FALSE,method="loess") +  scale_y_log10() + facet_wrap(~gene)
 dev.off()
 ```
