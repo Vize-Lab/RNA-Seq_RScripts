@@ -42,7 +42,7 @@ mean(totalCounts)
 ### Construct conditions (MEGA2014)
 ```{r}
 indiv= c("H1", "H1", "H1", "H1", "H1", "H1", "H1", "H1", "H2", "H2", "H2", "H2", "H2", "H2", "H3", "H3", "H3", "H3","H3", "H3", "H3", "H3")  
-lunar=c("3", "1", "4", "2", "3","1", "4", "2", "3", "4", "2", "3", "1", "2", "3","1", "4", "2", "3", "1", "4", "3")
+lunar=c("3", "1", "4", "2", "3","1", "4", "2", "3", "4", "2", "3", "1", "2", "3","1", "4", "2", "3", "1", "4", "2")
 dayTime=c("day","day","day","day", "night", "night", "night", "night", "day","day","day", "night", "night", "night", "day","day","day","day", "night", "night", "night", "night")
 ```
 ```
